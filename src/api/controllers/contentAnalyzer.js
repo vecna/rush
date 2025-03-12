@@ -3,6 +3,11 @@
 
 const cheerio = require('cheerio');
 const cache = require('../../utils/cache');
+const TurndownService = require('turndown');
+const debug = require('debug')('rush:contentAnalyzer');
+
+// Create a new instance of Turndown service
+const turndownService = new TurndownService();
 
 /**
  * Extracts posts from the given HTML content of a phpBB forum thread.
@@ -15,21 +20,29 @@ function getPosts(htmlContent) {
     // First, try to get the cached result
     const cachedResult = cache.get(htmlContent);
     if (cachedResult) {
+        debug("Cache hit");
         return cachedResult;
     }
 
     const $ = cheerio.load(htmlContent);
     const posts = [];
 
-    // Assuming each post/reply in the phpBB forum is contained in elements with a class `.post`
-    // This selector might need to be adjusted based on the actual HTML structure of the forum.
-    $('.post').each(function () {
-        // Extract necessary elements. Here, we just simulate extracting the text of each post.
-        // You may need to adjust selectors based on the actual HTML structure and required data.
-        const postText = $(this).find('.content').text(); // Adjust '.content' to the correct selector for post text
+    $('.post').each(function (i) {
+        debug("Analyzing reply number ", i + 1);
+        // Extract necessary elements. 
+        const postAuthor = $(this).find('.author'); 
+        // Inside of postAuthor, there is <time datetime="XXX"></time> and we need datetime
+        const postDate = postAuthor.find('time').attr('datetime');
+        const authorName = postAuthor.find('.username').text();
+
+        const postHTML = $(this).find('.content').html(); 
+        const postMd = turndownService.turndown(postHTML);
+        debug("Post content MarkDown length: ", postMd.length);
 
         posts.push({
-            text: postText.trim()
+            post: postMd,
+            postDate,
+            authorName,
         });
     });
 
