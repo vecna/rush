@@ -18,8 +18,9 @@ rushWebServer.use(api1.allowedMethods());
 rushWebServer.use(api2.routes());
 rushWebServer.use(api2.allowedMethods());
 
-rushWebServer.listen(3000, '0.0.0.0', () => {
-  console.log('Server running on all the interfaces port 3000');
+// rushWebServer.listen(3123, '0.0.0.0', () => {
+rushWebServer.listen(3123, () => {
+  console.log('Server running on all the interfaces port 3123');
 });
 
 module.exports = rushWebServer;
