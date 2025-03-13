@@ -4,17 +4,31 @@ const fs = require('fs').promises;
 const path = require('path');
 const getSortedFiles = require('../../utils/sortedFiles').getSortedFiles;
 const config = require('../../config/config');
-const contentAnalyzer = require('../controllers/contentAnalyzer');
-const debug = require('debug')('rush:routes');
+const contentAnalyzer = require('../../utils/contentAnalyzer');
+const debug = require('debug')('rush:routes:1');
 
 const router = new Router();
 
 // Swagger setup
 swaggerRouter(router);
 
-// Define other routes
-router.get('/api', async (ctx) => {
-    ctx.body = 'Welcome to the API main route, checkout /swagger to see all the documentation';
+/**
+ * @openapi
+ * /1/:
+ *   get:
+ *     summary: Root Endpoint for API set 1
+ *     description: Returns a simple text message as a response, it's the logic for API set 1
+ *     responses:
+ *       200:
+ *         description: A simple text response
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ *               example: "Welcome to API version 1"
+ */
+router.get('/1', async (ctx) => {
+    ctx.body = 'API set 1 contains endpoints that return the original content with least modification as possible. Please che /swagger to see all the documentation. The original are meant to be processed by other consumers, and via API set 2 the elaboration can be saved.';
 });
 
 /**
@@ -95,13 +109,13 @@ router.get('/1/content', async (ctx) => {
  *             schema:
  *               type: object
  *               properties:
- *                 totalFiles:
+ *                 total_files:
  *                   type: integer
  *                   description: The number of files
- *                 totalSize:
+ *                 total_size:
  *                   type: integer
  *                   description: The total size of all files in bytes
- *                 filesWithSize:
+ *                 files:
  *                   type: array
  *                   description: filename and it's size
  *                   items:
@@ -113,7 +127,7 @@ router.get('/1/content', async (ctx) => {
  *                       size:
  *                         type: integer
  *                         description: The size of the file in bytes
- *                       fileNumber:
+ *                       file_number:
  *                         type: integer
  *                         description: Incremental number that identify the file
  */
@@ -121,22 +135,22 @@ router.get('/1/stats', async (ctx) => {
     try {
         /* this is a consistent old to new file order */
         const files = await getSortedFiles(config.dataPath);
-        let totalSize = 0;
+        let total_size = 0;
 
-        const filesWithSize = await Promise.all(files.map(async (file, i) => {
+        const files_with_size = await Promise.all(files.map(async (file, i) => {
             const stats = await fs.stat(path.resolve(config.dataPath, file));
-            totalSize += stats.size;
+            total_size += stats.size;
             return {
                 name: file,
                 size: stats.size,
-                fileNumber: i,
+                file_number: i,
             };
         }));
 
         ctx.body = {
-            totalFiles: files.length,
-            totalSize,
-            filesWithSize
+            total_files: files.length,
+            total_size,
+            files_with_size
         };
     } catch (error) {
         ctx.status = 500;

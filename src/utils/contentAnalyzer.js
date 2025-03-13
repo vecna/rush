@@ -1,10 +1,8 @@
-
-// contentAnalyzer.js
-
 const cheerio = require('cheerio');
-const cache = require('../../utils/cache');
 const TurndownService = require('turndown');
 const debug = require('debug')('rush:contentAnalyzer');
+
+const cache = require('./cache');
 
 // Create a new instance of Turndown service
 const turndownService = new TurndownService();
