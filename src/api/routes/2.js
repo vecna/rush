@@ -1,11 +1,11 @@
 const Router = require('koa-router');
 const { swaggerRouter } = require('../../middleware/swagger');
-const config = require('../../config/config');
 const debug = require('debug')('rush:routes:2');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { MongoClient, ObjectId } = require('mongodb');
 
 const router = new Router();
+const mongoUrl = 'mongodb://localhost:27017';
+const dbName = 'rush';
 
 // Swagger setup
 swaggerRouter(router);
@@ -31,15 +31,15 @@ router.get('/2', async (ctx) => {
 
 /**
  * @openapi
- * /2/io/{db_name}:
+ * /2/io/{collection_name}:
  *   get:
  *     summary: Get all entries
- *     description: Returns all content from the SQLite database with the specified name.
+ *     description: Returns all content from the specified collection.
  *     parameters:
- *       - name: db_name
+ *       - name: collection_name
  *         in: path
  *         required: true
- *         description: Name of the database
+ *         description: Name of the collection
  *         schema:
  *           type: string
  *     responses:
@@ -52,37 +52,39 @@ router.get('/2', async (ctx) => {
  *               items:
  *                 type: object
  */
-router.get('/2/io/:db_name', async (ctx) => {
-    const dbName = ctx.params.db_name;
-    debug(`Fetching all entries from database: ${dbName}`);
-    const dbPath = path.join(config.databases, `${dbName}.db`);
-    const db = new sqlite3.Database(dbPath);
+router.get('/2/io/:collection_name', async (ctx) => {
+    const collectionName = ctx.params.collection_name;
+    debug(`Fetching all entries from collection: ${collectionName}`);
 
-    db.all("SELECT * FROM entries", [], (err, rows) => {
-        if (err) {
-            debug(`Error fetching entries: ${err.message}`);
-            ctx.status = 500;
-            ctx.body = { error: err.message };
-            return;
-        }
-        debug(`Entries fetched successfully: ${JSON.stringify(rows)}`);
-        ctx.body = rows;
-    });
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
 
-    db.close();
+    try {
+        const entries = await collection.find({}).toArray();
+        debug(`Entries fetched successfully: ${JSON.stringify(entries)}`);
+        ctx.body = entries;
+    } catch (err) {
+        debug(`Error fetching entries: ${err.message}`);
+        ctx.status = 500;
+        ctx.body = { error: err.message };
+    } finally {
+        await client.close();
+    }
 });
 
 /**
  * @openapi
- * /2/io/{db_name}:
+ * /2/io/{collection_name}:
  *   put:
  *     summary: Create a new entry
- *     description: Creates a new entry in the specified SQLite database.
+ *     description: Creates a new entry in the specified collection.
  *     parameters:
- *       - name: db_name
+ *       - name: collection_name
  *         in: path
  *         required: true
- *         description: Name of the database
+ *         description: Name of the collection
  *         schema:
  *           type: string
  *     requestBody:
@@ -91,11 +93,6 @@ router.get('/2/io/:db_name', async (ctx) => {
  *         application/json:
  *           schema:
  *             type: object
- *             properties:
- *               field1:
- *                 type: string
- *               field2:
- *                 type: string
  *     responses:
  *       200:
  *         description: The ID of the created entry
@@ -105,57 +102,41 @@ router.get('/2/io/:db_name', async (ctx) => {
  *               type: object
  *               properties:
  *                 id:
- *                   type: integer
+ *                   type: string
  */
-router.put('/2/io/:db_name', async (ctx) => {
-    const dbName = ctx.params.db_name;
-    const dbPath = path.join(config.databases, `${dbName}.db`);
-
-
-    // Validate fields from ctx.request.body
+router.put('/2/io/:collection_name', async (ctx) => {
+    const collectionName = ctx.params.collection_name;
     const requestBody = ctx.request.body;
-    for (const key of config.expectedKeys) {
-        if (!requestBody[key]) {
-            debug(`Missing field in the JSON body: ${key}`);
-            ctx.status = 400;
-            ctx.body = { error: `Missing field in the JSON body: ${key}` };
-            return;
-        }
+
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    try {
+        const result = await collection.insertOne(requestBody);
+        debug(`Entry created successfully with ID: ${result.insertedId}`);
+        ctx.body = { id: result.insertedId };
+    } catch (err) {
+        debug(`Error creating entry: ${err.message}`);
+        ctx.status = 500;
+        ctx.body = { error: err.message };
+    } finally {
+        await client.close();
     }
-
-    debug(`Creating new entry in database: ${dbName} in ${dbPath}`);
-    const db = new sqlite3.Database(dbPath);
-
-    // Construct the query dynamically
-    const columns = config.expectedKeys.join(", ");
-    const placeholders = config.expectedKeys.map(() => "?").join(", ");
-    const values = config.expectedKeys.map(key => requestBody[key]);
-
-    db.run(`INSERT INTO entries (${columns}) VALUES (${placeholders})`, values, function(err) {
-        if (err) {
-            debug(`Error creating entry: ${err.message}`);
-            ctx.status = 500;
-            ctx.body = { error: err.message };
-            return;
-        }
-        debug(`Entry created successfully with ID: ${this.lastID}`);
-        ctx.body = { id: this.lastID };
-    });
-
-    db.close();
 });
 
 /**
  * @openapi
- * /2/io/{db_name}/{id}:
+ * /2/io/{collection_name}/{id}:
  *   post:
  *     summary: Update an entry
- *     description: Updates an entry in the specified SQLite database.
+ *     description: Updates an entry in the specified collection.
  *     parameters:
- *       - name: db_name
+ *       - name: collection_name
  *         in: path
  *         required: true
- *         description: Name of the database
+ *         description: Name of the collection
  *         schema:
  *           type: string
  *       - name: id
@@ -163,18 +144,13 @@ router.put('/2/io/:db_name', async (ctx) => {
  *         required: true
  *         description: ID of the entry to update
  *         schema:
- *           type: integer
+ *           type: string
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             properties:
- *               field1:
- *                 type: string
- *               field2:
- *                 type: string
  *     responses:
  *       200:
  *         description: The number of updated entries
@@ -186,45 +162,46 @@ router.put('/2/io/:db_name', async (ctx) => {
  *                 updated:
  *                   type: integer
  */
-router.post('/2/io/:db_name/:id', async (ctx) => {
-    const dbName = ctx.params.db_name;
-    const dbPath = path.join(config.databases, `${dbName}.db`);
+router.post('/2/io/:collection_name/:id', async (ctx) => {
+    const collectionName = ctx.params.collection_name;
     const id = ctx.params.id;
-    const { field1, field2 } = ctx.request.body;
+    const requestBody = ctx.request.body;
 
-    debug(`Updating entry with ID: ${id} in database: ${dbName}`);
-    const db = new sqlite3.Database(dbPath);
-    db.run("UPDATE entries SET field1 = ?, field2 = ? WHERE id = ?", [field1, field2, id], function(err) {
-        if (err) {
-            debug(`Error updating entry: ${err.message}`);
-            ctx.status = 500;
-            ctx.body = { error: err.message };
-            return;
-        }
-        if (this.changes === 0) {
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    try {
+        const result = await collection.updateOne({ _id: new ObjectId(id) }, { $set: requestBody });
+        if (result.matchedCount === 0) {
             debug(`ID not found: ${id}`);
             ctx.status = 404;
             ctx.body = { error: "ID not found" };
             return;
         }
-        debug(`Entry updated successfully: ${this.changes} changes`);
-        ctx.body = { updated: this.changes };
-    });
-
-    db.close();
+        debug(`Entry updated successfully: ${result.modifiedCount} changes`);
+        ctx.body = { updated: result.modifiedCount };
+    } catch (err) {
+        debug(`Error updating entry: ${err.message}`);
+        ctx.status = 500;
+        ctx.body = { error: err.message };
+    } finally {
+        await client.close();
+    }
 });
 
 /**
  * @openapi
- * /2/io/{db_name}/{id}:
+ * /2/io/{collection_name}/{id}:
  *   delete:
  *     summary: Delete an entry
- *     description: Deletes an entry from the specified SQLite database.
+ *     description: Deletes an entry from the specified collection.
  *     parameters:
- *       - name: db_name
+ *       - name: collection_name
  *         in: path
  *         required: true
- *         description: Name of the database
+ *         description: Name of the collection
  *         schema:
  *           type: string
  *       - name: id
@@ -232,7 +209,7 @@ router.post('/2/io/:db_name/:id', async (ctx) => {
  *         required: true
  *         description: ID of the entry to delete
  *         schema:
- *           type: integer
+ *           type: string
  *     responses:
  *       200:
  *         description: The number of deleted entries
@@ -244,49 +221,50 @@ router.post('/2/io/:db_name/:id', async (ctx) => {
  *                 deleted:
  *                   type: integer
  */
-router.delete('/2/io/:db_name/:id', async (ctx) => {
-    const dbName = ctx.params.db_name;
-    const dbPath = path.join(config.databases, `${dbName}.db`);
+router.delete('/2/io/:collection_name/:id', async (ctx) => {
+    const collectionName = ctx.params.collection_name;
     const id = ctx.params.id;
 
-    debug(`Deleting entry with ID: ${id} from database: ${dbName}`);
-    const db = new sqlite3.Database(dbPath);
-    db.run("DELETE FROM entries WHERE id = ?", [id], function(err) {
-        if (err) {
-            debug(`Error deleting entry: ${err.message}`);
-            ctx.status = 500;
-            ctx.body = { error: err.message };
-            return;
-        }
-        if (this.changes === 0) {
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    try {
+        const result = await collection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
             debug(`ID not found: ${id}`);
             ctx.status = 404;
             ctx.body = { error: "ID not found" };
             return;
         }
-        debug(`Entry deleted successfully: ${this.changes} changes`);
-        ctx.body = { deleted: this.changes };
-    });
-
-    db.close();
+        debug(`Entry deleted successfully: ${result.deletedCount} changes`);
+        ctx.body = { deleted: result.deletedCount };
+    } catch (err) {
+        debug(`Error deleting entry: ${err.message}`);
+        ctx.status = 500;
+        ctx.body = { error: err.message };
+    } finally {
+        await client.close();
+    }
 });
 
 /**
  * @openapi
- * /2/initialize/{db_name}:
+ * /2/initialize/{collection_name}:
  *   post:
- *     summary: Initialize the database
- *     description: Initializes the SQLite database with the required table schema.
+ *     summary: Initialize the collection
+ *     description: Initializes the collection with the required schema.
  *     parameters:
- *       - name: db_name
+ *       - name: collection_name
  *         in: path
  *         required: true
- *         description: Name of the database
+ *         description: Name of the collection
  *         schema:
  *           type: string
  *     responses:
  *       200:
- *         description: Database initialized successfully
+ *         description: Collection initialized successfully
  *         content:
  *           application/json:
  *             schema:
@@ -295,32 +273,25 @@ router.delete('/2/io/:db_name/:id', async (ctx) => {
  *                 message:
  *                   type: string
  */
-router.post('/2/initialize/:db_name', async (ctx) => {
-    const dbName = ctx.params.db_name;
-    const dbPath = path.join(config.databases, `${dbName}.db`);
+router.post('/2/initialize/:collection_name', async (ctx) => {
+    const collectionName = ctx.params.collection_name;
 
-    debug(`Initializing database: ${dbName}`);
-    // Initialize the database
-    initializeDatabase(dbPath, config.expectedKeys);
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
 
-    ctx.body = { message: "Database initialized successfully" };
+    try {
+        await collection.createIndex({ id: 1 }, { unique: true });
+        debug(`Collection '${collectionName}' initialized successfully`);
+        ctx.body = { message: "Collection initialized successfully" };
+    } catch (err) {
+        debug(`Error initializing collection: ${err.message}`);
+        ctx.status = 500;
+        ctx.body = { error: err.message };
+    } finally {
+        await client.close();
+    }
 });
-
-// Function to initialize the database
-function initializeDatabase(dbPath, config.expectedKeys) {
-    const db = new sqlite3.Database(dbPath);
-    const columns = config.expectedKeys.map(key => `${key} TEXT`).join(", ");
-    const createTableQuery = `CREATE TABLE IF NOT EXISTS entries (id INTEGER PRIMARY KEY AUTOINCREMENT, ${columns})`;
-
-    db.run(createTableQuery, (err) => {
-        if (err) {
-            debug(`Error creating table: ${err.message}`);
-        } else {
-            debug(`Table 'entries' ensured in database: ${dbPath}`);
-        }
-    });
-
-    db.close();
-}
 
 module.exports = router;
