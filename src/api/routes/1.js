@@ -228,7 +228,7 @@ router.get('/1/content/:file_number', async (ctx) => {
 
     if (target_fn < 0 || target_fn >= files.length) {
         ctx.status = 404;
-        ctx.body = { error: 'File Number invalid, max is: ' + files.length };
+        ctx.body = { error: 'File Number invalid, max is: ' + files.length -1 };
         return;
     }
 
