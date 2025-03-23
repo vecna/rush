@@ -3,22 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Table Example</title>
+    <title>Index</title>
 </head>
 <body>
-    <table id="data-table" border="1">
-        <thead>
-            <tr>
-                <th>Number</th>
-                <th>Checkbox</th>
-                <th>Link</th>
-                <th>Copy JSON</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Rows will be populated by index.js -->
-        </tbody>
-    </table>
-    <script src="index.js"></script>
+    <h1>Welcome to the Index Page</h1>
+    <ul>
+        <li>
+            <a href="/list.html">List Page</a>
+            <p>This page return a numered list of posts (from the original forum). It calls the API endpoint <code>/1/content</code>, and you can see it documented or test it in <a href="/swagger">swagger</a>.</p>
+        </li>
+        <li>
+            <a href="/splitter.html">Splitter Page</a>
+            <p>This page provides a tool to split the JSON returned by <code>/1/content</code>into parts, so chatgpt or any other language model can process it more easily. It is useful only for manual work.</p>
+        </li>
+    </ul>
 </body>
 </html>

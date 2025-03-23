@@ -48,6 +48,23 @@ function getPosts(htmlContent) {
     return posts;
 }
 
+/**
+ * Extracts posts from the given HTML content of a phpBB forum thread and removes base64 images.
+ * 
+ * @param {string} htmlContent - The HTML content of the forum thread.
+ * @returns {Array<Object>} An array of objects, each representing a post.
+ */
+function getPostsWithoutPictures(htmlContent) {
+    const posts = getPosts(htmlContent);
+
+    posts.forEach(post => {
+        post.post = post.post.replace(/(!\[.*?\]\(data:image\/.*?;base64,).*?\)/g, '$1BASE64-IMAGE-REMOVED)');
+    });
+
+    return posts;
+}
+
 module.exports = {
-    getPosts
+    getPosts,
+    getPostsWithoutPictures,
 };

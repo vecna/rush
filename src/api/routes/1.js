@@ -236,7 +236,10 @@ router.get('/1/content/:file_number', async (ctx) => {
 
     const content = await fs.readFile(path.resolve(config.dataPath, file), 'utf8');
     debug("Analyzing content of [%s]", file);
-    const posts = contentAnalyzer.getPosts(content);
+    // Reminder: we should add an option to get the full posts (getPosts) and by 
+    // default return the posts without pictures (getPostsWithoutPictures). This 
+    // choice isn't available yet.
+    const posts = contentAnalyzer.getPostsWithoutPictures(content);
     ctx.status = 200;
     ctx.body = {
         name: file,
