@@ -1,5 +1,5 @@
 const MAX_ROWS = 65;
-const processor = "clagpts";
+const processor = "rilpub";
 
 document.addEventListener('DOMContentLoaded', () => {
     const tableBody = document.querySelector('#data-table tbody');
